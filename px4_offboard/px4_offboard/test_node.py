@@ -5,6 +5,8 @@ import geometry_msgs.msg
 import rclpy
 import std_msgs.msg
 
+from .classes import SetpointType
+
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
 if sys.platform == 'win32':
@@ -98,8 +100,9 @@ def main():
         depth=10
     )
 
+    setpoint_type_pub = node.create_publisher(std_msgs.msg.String, '/setpoint_type', qos_profile)
 
-    pub = node.create_publisher(geometry_msgs.msg.Twist, '/offboard_velocity_cmd', qos_profile)
+    setpoint_pub = node.create_publisher(geometry_msgs.msg.Twist, '/setpoint', qos_profile)
 
     arm_toggle = False
     arm_pub = node.create_publisher(std_msgs.msg.Bool, '/arm_message', qos_profile)
@@ -144,6 +147,8 @@ def main():
                 print(f"Arm toggle is now: {arm_toggle}")
 
             twist = geometry_msgs.msg.Twist()
+
+            setpoint_type_pub.publish(SetpointType(SetpointType.VELOCITY))
             
             x_val = (x * speed) + x_val
             y_val = (y * speed) + y_val
@@ -155,7 +160,9 @@ def main():
             twist.angular.x = 0.0
             twist.angular.y = 0.0
             twist.angular.z = yaw_val
-            pub.publish(twist)
+
+            setpoint_pub.publish(twist)
+            
             print("X:",twist.linear.x, "   Y:",twist.linear.y, "   Z:",twist.linear.z, "   Yaw:",twist.angular.z)
             
 
@@ -164,16 +171,18 @@ def main():
 
     finally:
         twist = geometry_msgs.msg.Twist()
+
+        setpoint_type_pub.publish(SetpointType(SetpointType.VELOCITY))
+
         twist.linear.x = 0.0
         twist.linear.y = 0.0
         twist.linear.z = 0.0
         twist.angular.x = 0.0
         twist.angular.y = 0.0
         twist.angular.z = 0.0
-        pub.publish(twist)
+        setpoint_pub.publish(twist)
 
         restoreTerminalSettings(settings)
-
 
 if __name__ == '__main__':
     main()
