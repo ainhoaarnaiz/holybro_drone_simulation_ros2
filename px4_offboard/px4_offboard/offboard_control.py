@@ -46,19 +46,22 @@ from px4_msgs.msg import TrajectorySetpoint
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import VehicleCommand
+from px4_msgs.msg import VehicleGlobalPosition
 from geometry_msgs.msg import Twist, Vector3
+import std_msgs.msg
 from math import pi
 from std_msgs.msg import Bool
 
+from .classes import SetpointType
 
 class OffboardControl(Node):
 
     def __init__(self):
         super().__init__('minimal_publisher')
         qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT,
-            durability=QoSDurabilityPolicy.RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL,
-            history=QoSHistoryPolicy.RMW_QOS_POLICY_HISTORY_KEEP_LAST,
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            history=QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
 
@@ -69,10 +72,22 @@ class OffboardControl(Node):
             self.vehicle_status_callback,
             qos_profile)
         
-        self.offboard_velocity_sub = self.create_subscription(
+        self.global_position_sub = self.create_subscription(
+            VehicleGlobalPosition,
+            '/fmu/out/vehicle_global_position',
+            self.vehicle_global_position_callback,
+            qos_profile)
+        
+        self.setpoint_type_sub = self.create_subscription(
+            std_msgs.msg.String,
+            '/setpoint_type',
+            self.setpoint_type_callback,
+            qos_profile)
+        
+        self.setpoint_sub = self.create_subscription(
             Twist,
-            '/offboard_velocity_cmd',
-            self.offboard_velocity_callback,
+            '/setpoint',
+            self.setpoint_callback,
             qos_profile)
         
         self.attitude_sub = self.create_subscription(
@@ -106,8 +121,11 @@ class OffboardControl(Node):
         timer_period = 0.02  # seconds
         self.timer = self.create_timer(timer_period, self.cmdloop_callback)
 
+        self.setpoint_type = SetpointType.VELOCITY
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.arm_state = VehicleStatus.ARMING_STATE_ARMED
+        self.global_position = Vector3()
+        self.local_position = Vector3()
         self.velocity = Vector3()
         self.yaw = 0.0  #yaw value we send as command
         self.trueYaw = 0.0  #current yaw value of drone
@@ -127,7 +145,6 @@ class OffboardControl(Node):
         }
         self.current_state = "IDLE"
         self.last_state = self.current_state
-
 
     def arm_message_callback(self, msg):
         self.arm_message = msg.data
@@ -210,20 +227,15 @@ class OffboardControl(Node):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
         self.offboardMode = True
 
-
-    
-
-        
-
     # Arms the vehicle
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
         self.get_logger().info("Arm command send")
 
     # Takes off the vehicle to a user specified altitude (meters)
-    def take_off(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=5.0) # param7 is altitude in meters
-        self.get_logger().info("Takeoff command send")
+    def take_off(self, alt=10.0):
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=alt) # param7 is altitude in meters
+        self.get_logger().info(f"Takeoff to {alt} command send")
 
     #publishes command to /fmu/in/vehicle_command
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0, param7=0.0):
@@ -260,9 +272,18 @@ class OffboardControl(Node):
         self.failsafe = msg.failsafe
         self.flightCheck = msg.pre_flight_checks_pass
 
+    def vehicle_global_position_callback(self, msg):
+        self.global_position.x = msg.lat
+        self.global_position.y = msg.lon
+        self.global_position.z = msg.alt
+        print(self.global_position.x, self.global_position.y, self.global_position.z)
+
+    def setpoint_type_callback(self, msg):
+        self.setpoint_type = msg
+        print(self.setpoint_type)
 
     #receives Twist commands from Teleop and converts NED -> FLU
-    def offboard_velocity_callback(self, msg):
+    def setpoint_callback(self, msg):
         #implements NED -> FLU Transformation
         self.velocity.x = -msg.linear.y
         self.velocity.y = msg.linear.x
@@ -283,6 +304,8 @@ class OffboardControl(Node):
 
     #receives current trajectory values from drone and grabs the yaw value of the orientation
     def attitude_callback(self, msg):
+        print(msg.q)
+
         orientation_q = msg.q
 
         #trueYaw is the drones current yaw value
