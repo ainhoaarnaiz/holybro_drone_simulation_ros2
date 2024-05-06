@@ -29,8 +29,7 @@ setup(
         'console_scripts': [
                 'offboard_control = px4_offboard.offboard_control:main',
                 'visualizer = px4_offboard.visualizer:main',
-                'velocity_control = px4_offboard.velocity_control:main',
-                'control = px4_offboard.control:main',
+                'test_node = px4_offboard.test_node:main',
                 'processes = px4_offboard.processes:main'
         ],
     },
