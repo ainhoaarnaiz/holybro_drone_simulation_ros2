@@ -63,15 +63,15 @@ def generate_launch_description():
         Node(
             package='px4_offboard',
             namespace='px4_offboard',
-            executable='control',
-            name='control',
+            executable='test_node',
+            name='test_node',
             prefix='gnome-terminal --',
         ),
         Node(
             package='px4_offboard',
             namespace='px4_offboard',
-            executable='velocity_control',
-            name='velocity'
+            executable='offboard_control',
+            name='offboard_control',
         ),
         Node(
             package='rviz2',
