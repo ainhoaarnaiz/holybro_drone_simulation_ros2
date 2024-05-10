@@ -120,12 +120,12 @@ def main():
     z_val = 0.0
     yaw_val = 0.0
     setpoint_type = String()
-    setpoint_type.data = SetpointType.VELOCITY
+    setpoint_type.data = SetpointType.GPS
 
     try:
         print(msg)
         # print(vels(speed, turn))
-        while True:
+        while not arm_toggle:
             key = getKey(settings)
             if key in moveBindings.keys():
                 x = moveBindings[key][0]
@@ -148,18 +148,18 @@ def main():
                 arm_pub.publish(arm_msg)
                 print(f"Arm toggle is now: {arm_toggle}")
 
+        while rclpy.ok():
+
             twist = geometry_msgs.msg.Twist()
+
+            setpoint_type_pub.publish(setpoint_type)
             
-            x_val = (x * speed) + x_val
-            y_val = (y * speed) + y_val
-            z_val = (z * speed) + z_val
-            yaw_val = (th * turn) + yaw_val
-            twist.linear.x = x_val
-            twist.linear.y = y_val
-            twist.linear.z = z_val
+            twist.linear.x = 47.39761
+            twist.linear.y = 8.54444
+            twist.linear.z = 15.0
             twist.angular.x = 0.0
             twist.angular.y = 0.0
-            twist.angular.z = yaw_val
+            twist.angular.z = 0.0
 
             setpoint_pub.publish(twist)
             

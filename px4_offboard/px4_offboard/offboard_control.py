@@ -51,6 +51,7 @@ from geometry_msgs.msg import Twist, Vector3
 import std_msgs.msg
 from math import pi
 from std_msgs.msg import Bool
+import pymap3d as pm
 
 from .classes import SetpointType
 
@@ -101,30 +102,45 @@ class OffboardControl(Node):
             '/arm_message',
             self.arm_message_callback,
             qos_profile)
-
+        
+        self.offboard_please = self.create_subscription(
+            Bool,
+            '/offboard_please',
+            self.offboard_please_callback,
+            qos_profile)
 
         #Create publishers
         self.publisher_offboard_mode = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.publisher_velocity = self.create_publisher(Twist, '/fmu/in/setpoint_velocity/cmd_vel_unstamped', qos_profile)
         self.publisher_trajectory = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
         self.vehicle_command_publisher_ = self.create_publisher(VehicleCommand, "/fmu/in/vehicle_command", 10)
+        self.gps_error_publisher = self.create_publisher(Twist, '/gps_error', qos_profile)
 
-        
         #creates callback function for the arm timer
         # period is arbitrary, just should be more than 2Hz
-        arm_timer_period = .1 # seconds
+        arm_timer_period = 1/10 # seconds
         self.arm_timer_ = self.create_timer(arm_timer_period, self.arm_timer_callback)
 
         # creates callback function for the command loop
         # period is arbitrary, just should be more than 2Hz. Because live controls rely on this, a higher frequency is recommended
         # commands in cmdloop_callback won't be executed if the vehicle is not in offboard mode
-        timer_period = 0.02  # seconds
+        timer_period = 1/50  # seconds
         self.timer = self.create_timer(timer_period, self.cmdloop_callback)
+
+        offboard_please_timer_period = .1  # seconds
+        self.offboard_please_time_ = self.create_timer(timer_period, self.offboard_please_callback)
+
+        setpoint_type_period = .1  # seconds
+        self.setpoint_type_timer = self.create_timer(setpoint_type_period, self.setpoint_type_callback)
+
+        setpoint_timer_period = 1/30 # seconds
+        self.setpoint_callback_timer = self.create_timer(setpoint_timer_period, self.setpoint_callback)
 
         self.setpoint_type = SetpointType.VELOCITY
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.arm_state = VehicleStatus.ARMING_STATE_ARMED
         self.global_position = Vector3()
+        self.global_setpoint_position = Vector3()
         self.local_position = Vector3()
         self.velocity = Vector3()
         self.yaw = 0.0  #yaw value we send as command
@@ -149,6 +165,13 @@ class OffboardControl(Node):
     def arm_message_callback(self, msg):
         self.arm_message = msg.data
         self.get_logger().info(f"Arm Message: {self.arm_message}")
+
+    def offboard_please_callback(self, msg):
+        self.get_logger().info(f"Offboard Please: {msg.data}")
+        if (msg.data == True):
+            #self.current_state = "OFFBOARD"
+            self.state_offboard()
+        self.get_logger().info(f"Offboard Mode: {self.offboardMode}")
 
     #callback function that arms, takes off, and switches to offboard mode
     #implements a finite state machine
@@ -276,7 +299,6 @@ class OffboardControl(Node):
         self.global_position.x = msg.lat
         self.global_position.y = msg.lon
         self.global_position.z = msg.alt
-        print(self.global_position.x, self.global_position.y, self.global_position.z)
 
     def setpoint_type_callback(self, msg):
         self.setpoint_type = msg
@@ -284,24 +306,80 @@ class OffboardControl(Node):
 
     #receives Twist commands from Teleop and converts NED -> FLU
     def setpoint_callback(self, msg):
-        #implements NED -> FLU Transformation
-        self.velocity.x = -msg.linear.y
-        self.velocity.y = msg.linear.x
-        self.velocity.z = -msg.linear.z
-        self.yaw = msg.angular.z
 
-        # X (FLU) is -Y (NED)
-        self.velocity.x = -msg.linear.y
+        self.get_logger().info(f"Setpoint work")
 
-        # Y (FLU) is X (NED)
-        self.velocity.y = msg.linear.x
+        if (self.setpoint_type.data == SetpointType.VELOCITY):
+            # X (FLU) is -Y (NED)
+            self.velocity.x = -msg.linear.y
 
-        # Z (FLU) is -Z (NED)
-        self.velocity.z = -msg.linear.z
+            # Y (FLU) is X (NED)
+            self.velocity.y = msg.linear.x
 
-        # A conversion for angular z is done in the attitude_callback function(it's the '-' in front of self.trueYaw)
-        self.yaw = msg.angular.z
+            # Z (FLU) is -Z (NED)
+            self.velocity.z = -msg.linear.z
 
+            # A conversion for angular z is done in the attitude_callback function(it's the '-' in front of self.trueYaw)
+            self.yaw = msg.angular.z
+        elif (self.setpoint_type.data == SetpointType.GPS):
+
+            self.global_setpoint_position.x = msg.linear.x
+            self.global_setpoint_position.y = msg.linear.y
+            self.global_setpoint_position.z = msg.linear.z
+            self.setpoint_yaw = msg.angular.z
+
+            gps_error = Twist()
+            gps_error.linear.x, gps_error.linear.y, gps_error.linear.z = pm.geodetic2ned(self.global_setpoint_position.x, self.global_setpoint_position.y, self.global_setpoint_position.z, self.global_position.x, self.global_position.y, self.global_position.z)
+            gps_error.angular.z = self.setpoint_yaw - self.trueYaw
+            self.gps_error_publisher.publish(gps_error)
+
+            self.velocity.x = gps_error.linear.x * 0.1
+            self.velocity.y = gps_error.linear.y * 0.1
+            self.velocity.z = gps_error.linear.z * 0.1
+            self.yaw = gps_error.angular.z
+
+            self.get_logger().info(f"Error: {gps_error.linear.x}, {gps_error.linear.y}, {gps_error.linear.z}, {gps_error.angular.z}")
+
+        elif (self.setpoint_type.data == SetpointType.POSITION):
+            self.global_setpoint_position.x = msg.linear.x
+            self.global_setpoint_position.y = msg.linear.y
+            self.global_setpoint_position.z = msg.linear.z
+            self.setpoint_yaw = msg.angular.z
+
+            gps_error = Twist()
+            gps_error.linear.x, gps_error.linear.y, gps_error.linear.z = pm.geodetic2ned(self.global_setpoint_position.x, self.global_setpoint_position.y, self.global_setpoint_position.z, self.global_position.x, self.global_position.y, self.global_position.z)
+            gps_error.angular.z = self.setpoint_yaw - self.trueYaw
+            self.gps_error_publisher.publish(gps_error)
+
+            self.velocity.x = gps_error.linear.x
+            self.velocity.y = gps_error.linear.y
+            self.velocity.z = gps_error.linear.z
+            self.yaw = gps_error.angular.z
+
+            self.get_logger().info(f"Error: {gps_error.linear.x}, {gps_error.linear.y}, {gps_error.linear.z}, {gps_error.angular.z}")
+
+        elif (self.setpoint_type.data == SetpointType.ALTITUDE):
+            self.global_setpoint_position.z = msg.linear.z
+            self.setpoint_yaw = msg.angular.z
+
+            gps_error = Twist()
+            gps_error.linear.z = self.global_setpoint_position.z - self.global_position.z
+            gps_error.angular.z = self.setpoint_yaw - self.trueYaw
+            self.gps_error_publisher.publish(gps_error)
+
+            self.velocity.x = 0.0
+            self.velocity.y = 0.0
+            self.velocity.z = gps_error.linear.z
+            self.yaw = gps_error.angular.z
+
+            self.get_logger().info(f"Error: {gps_error.linear.x}, {gps_error.linear.y}, {gps_error.linear.z}, {gps_error.angular.z}")
+            
+        elif (self.setpoint_type.data == SetpointType.ATTITUDE):
+            self.velocity.x = 0.0
+            self.velocity.y = 0.0
+            self.velocity.z = 0.0
+            self.yaw = msg.angular.z
+            
     #receives current trajectory values from drone and grabs the yaw value of the orientation
     def attitude_callback(self, msg):
         print(msg.q)
