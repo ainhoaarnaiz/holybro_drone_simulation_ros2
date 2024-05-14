@@ -30,7 +30,8 @@ setup(
                 'offboard_control = px4_offboard.offboard_control:main',
                 'visualizer = px4_offboard.visualizer:main',
                 'test_node = px4_offboard.test_node:main',
-                'processes = px4_offboard.processes:main'
+                'processes = px4_offboard.processes:main',
+                "mavsdk_motion = px4_offboard.mavsdk_motion:main",
         ],
     },
 )

@@ -302,7 +302,6 @@ class OffboardControl(Node):
 
     def setpoint_type_callback(self, msg):
         self.setpoint_type = msg
-        print(self.setpoint_type)
 
     #receives Twist commands from Teleop and converts NED -> FLU
     def setpoint_callback(self, msg):
