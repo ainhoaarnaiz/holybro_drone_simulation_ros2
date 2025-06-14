@@ -36,9 +36,7 @@ __author__ = "Braden Wagstaff"
 __contact__ = "braden@arkelectron.com"
 
 from launch import LaunchDescription
-from launch.event_handlers import OnShutdown
-from launch.actions import ExecuteProcess, Shutdown, RegisterEventHandler, LogInfo
-from launch.substitutions import LocalSubstitution
+from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -53,43 +51,33 @@ def generate_launch_description():
             package='px4_offboard',
             namespace='px4_offboard',
             executable='visualizer',
-            name='visualizer',
+            name='visualizer'
         ),
         Node(
             package='px4_offboard',
             namespace='px4_offboard',
             executable='processes',
             name='processes',
+            prefix='gnome-terminal --'
+        ),
+        Node(
+            package='px4_offboard',
+            namespace='px4_offboard',
+            executable='control',
+            name='control',
             prefix='gnome-terminal --',
         ),
         Node(
             package='px4_offboard',
             namespace='px4_offboard',
-            executable='test_node',
-            name='test_node',
-            prefix='gnome-terminal --',
-        ),
-        Node(
-            package='px4_offboard',
-            namespace='px4_offboard',
-            executable='offboard_control',
-            name='offboard_control',
+            executable='velocity_control',
+            name='velocity'
         ),
         Node(
             package='rviz2',
             namespace='',
             executable='rviz2',
             name='rviz2',
-            arguments=['-d', [os.path.join(package_dir, 'visualize.rviz')]],
-        ),
-        RegisterEventHandler(
-            OnShutdown(
-                on_shutdown=[
-                    LogInfo(
-                        msg=['Launch was asked to shutdown: ', LocalSubstitution('event.reason')]
-                    ),
-                    
-                ]
-            )
-        ),
+            arguments=['-d', [os.path.join(package_dir, 'visualize.rviz')]]
+        )
     ])

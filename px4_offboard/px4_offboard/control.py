@@ -3,9 +3,7 @@ import sys
 
 import geometry_msgs.msg
 import rclpy
-from std_msgs.msg import String, Bool
-
-from .classes import SetpointType
+import std_msgs.msg
 
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
@@ -100,12 +98,11 @@ def main():
         depth=10
     )
 
-    setpoint_type_pub = node.create_publisher(String, '/setpoint_type', qos_profile)
 
-    setpoint_pub = node.create_publisher(geometry_msgs.msg.Twist, '/setpoint', qos_profile)
+    pub = node.create_publisher(geometry_msgs.msg.Twist, '/offboard_velocity_cmd', qos_profile)
 
     arm_toggle = False
-    arm_pub = node.create_publisher(Bool, '/arm_message', qos_profile)
+    arm_pub = node.create_publisher(std_msgs.msg.Bool, '/arm_message', qos_profile)
 
 
     speed = 0.5
@@ -119,13 +116,11 @@ def main():
     y_val = 0.0
     z_val = 0.0
     yaw_val = 0.0
-    setpoint_type = String()
-    setpoint_type.data = SetpointType.GPS
 
     try:
         print(msg)
         # print(vels(speed, turn))
-        while not arm_toggle:
+        while True:
             key = getKey(settings)
             if key in moveBindings.keys():
                 x = moveBindings[key][0]
@@ -143,26 +138,24 @@ def main():
 
             if key == ' ':  # ASCII value for space
                 arm_toggle = not arm_toggle  # Flip the value of arm_toggle
-                arm_msg = Bool()
+                arm_msg = std_msgs.msg.Bool()
                 arm_msg.data = arm_toggle
                 arm_pub.publish(arm_msg)
                 print(f"Arm toggle is now: {arm_toggle}")
 
-        while rclpy.ok():
-
             twist = geometry_msgs.msg.Twist()
-
-            setpoint_type_pub.publish(setpoint_type)
             
-            twist.linear.x = 47.39761
-            twist.linear.y = 8.54444
-            twist.linear.z = 15.0
+            x_val = (x * speed) + x_val
+            y_val = (y * speed) + y_val
+            z_val = (z * speed) + z_val
+            yaw_val = (th * turn) + yaw_val
+            twist.linear.x = x_val
+            twist.linear.y = y_val
+            twist.linear.z = z_val
             twist.angular.x = 0.0
             twist.angular.y = 0.0
-            twist.angular.z = 0.0
-
-            setpoint_pub.publish(twist)
-            
+            twist.angular.z = yaw_val
+            pub.publish(twist)
             print("X:",twist.linear.x, "   Y:",twist.linear.y, "   Z:",twist.linear.z, "   Yaw:",twist.angular.z)
             
 
@@ -171,18 +164,16 @@ def main():
 
     finally:
         twist = geometry_msgs.msg.Twist()
-
-        setpoint_type_pub.publish(setpoint_type)
-
         twist.linear.x = 0.0
         twist.linear.y = 0.0
         twist.linear.z = 0.0
         twist.angular.x = 0.0
         twist.angular.y = 0.0
         twist.angular.z = 0.0
-        setpoint_pub.publish(twist)
+        pub.publish(twist)
 
         restoreTerminalSettings(settings)
+
 
 if __name__ == '__main__':
     main()
