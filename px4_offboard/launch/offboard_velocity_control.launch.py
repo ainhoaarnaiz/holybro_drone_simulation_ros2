@@ -74,6 +74,13 @@ def generate_launch_description():
             name='velocity'
         ),
         Node(
+            package='px4_offboard',
+            namespace='px4_offboard',
+            executable='navigation',
+            name='navigation',
+            output='screen'
+        ),
+        Node(
             package='rviz2',
             namespace='',
             executable='rviz2',

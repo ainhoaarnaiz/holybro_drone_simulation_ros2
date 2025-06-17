@@ -30,6 +30,7 @@ setup(
                 'offboard_control = px4_offboard.offboard_control:main',
                 'visualizer = px4_offboard.visualizer:main',
                 'velocity_control = px4_offboard.velocity_control:main',
+                'navigation = px4_offboard.navigation:main',
                 'control = px4_offboard.control:main',
                 'processes = px4_offboard.processes:main'
         ],

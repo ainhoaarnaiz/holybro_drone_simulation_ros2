@@ -289,6 +289,7 @@ class OffboardControl(Node):
                     self.received_position_setpoint = None
 
             if use_position_mode:
+                # self.last_position_setpoint_time = self.get_clock().now()  # Extend timeout
                 offboard_msg.position = True
                 offboard_msg.velocity = False
             else:
