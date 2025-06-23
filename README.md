@@ -7,7 +7,7 @@
 This tutorial explains at a basic level how to use ROS2 and PX4 in order to control a simulated UAV's velocity with keyboard controls and 3D position goals.
 
 This repo is a derivative of ARK Electronics Offboard example:
-https://github.com/ARK-Electronics/ROS2_PX4_Offboard_Example
+[https://github.com/ARK-Electronics/ROS2_PX4_Offboard_Example]()
 
 ### Prerequisites
 
